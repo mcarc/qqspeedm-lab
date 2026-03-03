@@ -1,0 +1,5 @@
+ocr_results/
+archive/
+/**/__pycache__/
+*.mp4
+*.log
