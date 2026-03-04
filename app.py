@@ -1,8 +1,9 @@
+import os
 import streamlit as st
 import subprocess
 import cv2
 import shutil
-import re
+import pandas as pd
 from pathlib import Path
 from typing import Optional, Tuple, Dict
 import numpy as np
@@ -89,6 +90,15 @@ def render_sidebar() -> Optional[Path]:
             if st.session_state.get('current_source_file') != str(selected_path):
                 st.session_state['current_source_file'] = str(selected_path)
                 st.session_state['clipped_video_path'] = None
+
+                # 切换文件时，强制关闭 OCR 模块并清理状态
+                st.session_state['show_ocr_module'] = False
+                st.session_state['current_ocr_coords'] = None
+                if 'data_df' in st.session_state:
+                    del st.session_state['data_df'] # 清除子模块的数据缓存
+
+                st.session_state.data_df = pd.DataFrame()
+
                 reset_canvas()
                 
             return selected_path
@@ -132,7 +142,8 @@ def render_slicer(video_path: Path):
             return
 
         with st.spinner("FFmpeg 正在处理..."):
-            success, msg = processor.slice_video(start_str, end_str, output_path="temp_clipped.mp4")
+            os.makedirs("tmp", exist_ok=True)
+            success, msg = processor.slice_video(start_str, end_str, output_path="tmp/clipped.mp4")
             if success:
                 st.session_state['clipped_video_path'] = msg
                 reset_canvas()
@@ -142,19 +153,17 @@ def render_slicer(video_path: Path):
                 st.code(msg)
 
 def render_roi_selector(clipped_video_path: str):
+    """
+    渲染 ROI 选择器（预设坐标 或 手动框选）。
+    注意：此函数不再直接渲染 OCR，而是负责更新 session_state 中的坐标和标志位。
+    """
     st.divider()
 
-    # --- 新增：初始化 OCR 模块的显示状态和坐标 ---
-    if 'show_ocr_module' not in st.session_state:
-        st.session_state['show_ocr_module'] = False
-    if 'current_ocr_coords' not in st.session_state:
-        st.session_state['current_ocr_coords'] = None
-
-    st.subheader("🎯 阶段二：提取 ROI 与数值识别")
+    st.subheader("🎯 阶段二：提取 ROI")
     
     roi_mode = st.radio(
         "选择提取方式:", 
-        ["手动在画面中框选", "使用预设坐标 (跳过框选)"], 
+        ["使用预设坐标", "手动在画面中框选"], 
         horizontal=True
     )
 
@@ -165,7 +174,8 @@ def render_roi_selector(clipped_video_path: str):
         "自定义手动输入": ""
     }
 
-    if roi_mode == "使用预设坐标 (跳过框选)":
+    # ---------------- 分支 A: 使用预设坐标 ----------------
+    if roi_mode == "使用预设坐标":
         st.markdown("### ✏️ 直接输入或选择坐标")
         p_col1, p_col2 = st.columns(2)
         with p_col1:
@@ -176,7 +186,6 @@ def render_roi_selector(clipped_video_path: str):
 
         coords = parse_roi_string(roi_input)
         
-        # 实时渲染预览和触发按钮
         if coords:
             x, y, w, h = coords
             st.success(f"坐标解析成功: X={x}, Y={y}, W={w}, H={h}")
@@ -192,22 +201,11 @@ def render_roi_selector(clipped_video_path: str):
                     if final_crop.size > 0:
                         st.image(final_crop, caption="直接提取的 ROI 预览")
                         
-                        # --- 集成 OCR 调用点 ---
-                        if st.button("🔍 确认区域并加载 OCR 模块", type="primary", key="btn_ocr_preset"): # 注意不同按钮建议加不同 key
+                        # --- 动作：确认坐标并开启 OCR 状态 ---
+                        if st.button("🔍 确认区域", type="primary", key="btn_ocr_preset"):
                             st.session_state['show_ocr_module'] = True
-                            st.session_state['current_ocr_coords'] = (x, y, w, h) # 如果是第二个调用点，改成 final_x, final_y, final_w, final_h
-
-                        # 将真正的执行逻辑从 button 的 if 块中独立出来
-                        if st.session_state['show_ocr_module'] and st.session_state['current_ocr_coords']:
-                            st.divider()
-                            # 每次重跑时，只要状态为 True，就会渲染这里的 checkbox 和视频流
-                            render_ocr(clipped_video_path, st.session_state['current_ocr_coords'])
-                            
-                            # 提供一个退出识别模式的按钮
-                            if st.button("❌ 停止识别并关闭模块"):
-                                st.session_state['show_ocr_module'] = False
-                                st.session_state['current_ocr_coords'] = None
-                                st.rerun()
+                            st.session_state['current_ocr_coords'] = (x, y, w, h)
+                            st.rerun()
                     else:
                         st.error("裁剪区域超出视频画面范围，请检查坐标！")
                 except Exception as e:
@@ -219,6 +217,7 @@ def render_roi_selector(clipped_video_path: str):
             st.session_state['clipped_video_path'] = None
             st.rerun()
 
+    # ---------------- 分支 B: 手动在画面中框选 ----------------
     else:
         col1, col2 = st.columns([1, 3])
         with col1:
@@ -247,6 +246,7 @@ def render_roi_selector(clipped_video_path: str):
                     reset_canvas()
                     st.rerun()
 
+                # --- Canvas 步骤 1: 粗略框选 ---
                 if st.session_state['crop_stage'] == 'full':
                     st.markdown("**第一步：粗略框选需要放大的区域**")
 
@@ -276,6 +276,7 @@ def render_roi_selector(clipped_video_path: str):
                                 st.session_state['crop_stage'] = 'zoomed'
                                 st.rerun() 
 
+                # --- Canvas 步骤 2: 精确提取 ---
                 elif st.session_state['crop_stage'] == 'zoomed':
                     st.markdown("**第二步：在放大区域中精确提取 ROI**")
                     
@@ -313,9 +314,11 @@ def render_roi_selector(clipped_video_path: str):
                             if final_crop.size > 0:
                                 st.image(final_crop, caption="提取的最终画面")
                                 
-                                # --- 集成 OCR 调用点 ---
+                                # --- 动作：确认坐标并开启 OCR 状态 ---
                                 if st.button("🔍 开始数值识别 (OCR)", type="primary"):
-                                    render_ocr(clipped_video_path, (final_x, final_y, final_w, final_h))
+                                    st.session_state['show_ocr_module'] = True
+                                    st.session_state['current_ocr_coords'] = (final_x, final_y, final_w, final_h)
+                                    st.rerun()
 
 # ================= 主函数 =================
 def main():
@@ -328,16 +331,31 @@ def main():
         st.session_state['zoom_coords'] = None
     if 'clipped_video_path' not in st.session_state:
         st.session_state['clipped_video_path'] = None
+    # 初始化 OCR 状态
+    if 'show_ocr_module' not in st.session_state:
+        st.session_state['show_ocr_module'] = False
+    if 'current_ocr_coords' not in st.session_state:
+        st.session_state['current_ocr_coords'] = None
 
     selected_path = render_sidebar()
 
     if selected_path:
         st.header(f"📁 当前文件: `{selected_path.name}`")
         
-        if not st.session_state['clipped_video_path']:
-            render_slicer(selected_path)
-        else:
-            render_roi_selector(st.session_state['clipped_video_path'])
+        if not st.session_state.get('show_ocr_module'):
+            # 步骤 1: 切片
+            if not st.session_state['clipped_video_path']:
+                render_slicer(selected_path)
+            else:
+                # 步骤 2: ROI 选择 (只负责设置状态，不直接渲染 OCR)
+                render_roi_selector(st.session_state['clipped_video_path'])
+
+        # 步骤 3: 统一执行 OCR 渲染
+        # 只要状态为开启且有坐标，就在主流程中渲染
+        if st.session_state.get('show_ocr_module') and st.session_state.get('current_ocr_coords'):
+            st.divider()
+            # 传入切片后的视频路径和选定的坐标
+            render_ocr(st.session_state['clipped_video_path'], st.session_state['current_ocr_coords'])
             
     else:
         st.info("👈 请先在左侧侧边栏选择视频源文件夹和文件。")

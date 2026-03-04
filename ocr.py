@@ -6,7 +6,7 @@ from ocr_backend import OcrProcessor
 from utils import img_path_to_base64, get_video_frame
 
 # 配置项
-OUTPUT_DIR = "ocr_results"
+OUTPUT_DIR = "tmp/ocr_results"
 CSV_PATH = os.path.join(OUTPUT_DIR, "data_log.csv")
 # VIDEO_SOURCE = 'temp_clipped.mp4'  # 将视频路径提取为常量，方便多处调用
 
@@ -78,27 +78,40 @@ def render_ocr(video_path, roi):
 
     status_container = st.container()
 
-    # --- 2. 视频处理控制区 ---
-    col1, col2 = st.columns([1, 5])
-    with col1:
-        start_btn = st.button("🚀 开始/重新提取视频", type="primary")
+    # --- 2. 自动触发与重跑控制区 ---
+    
+    # 逻辑开关
+    should_run = False
+    
+    # 情况 A：Session 中完全没有数据（初次进入或被主模块清空）
+    if st.session_state.data_df.empty:
+        should_run = True
 
-    if start_btn:
-        processor = get_processor()
-        new_data = process_video(processor, video_path, roi, status_container)
-        
-        if new_data:
-            df = pd.DataFrame(new_data)
-            df.to_csv(CSV_PATH, index=False)
-            st.session_state.data_df = df
-            st.success(f"已提取 {len(df)} 条数据，页面将刷新...")
-            st.rerun()
-        else:
-            st.warning("未提取到数据或发生错误")
+    # 情况 B：保留手动强制重跑按钮
+    # 放在顶部的角落，或者数据编辑区的上方
+    col_info, col_btn = st.columns([5, 1])
+    with col_btn:
+        if st.button("🔄 强制重跑", use_container_width=True):
+            should_run = True
+
+    # --- 执行核心逻辑 ---
+    if should_run:
+        # 使用 spinner 做一个极简的加载提示，不占用进度条位置
+        with st.spinner("正在后台提取数值..."):
+            processor = get_processor()
+            
+            new_data = process_video(processor, video_path, roi, status_container)
+            
+            if new_data:
+                df = pd.DataFrame(new_data)
+                df.to_csv(CSV_PATH, index=False)
+                st.session_state.data_df = df
+                st.rerun() # 跑完直接刷新，进入结果展示阶段
+            else:
+                st.error("未能提取到有效数据，请检查 ROI 区域。")
 
     # --- 3. 结果展示与编辑区 ---
     if not st.session_state.data_df.empty:
-        st.divider()
         st.subheader("🔍 范围选择与预览")
 
         df_all = st.session_state.data_df
@@ -194,4 +207,11 @@ def render_ocr(video_path, roi):
         st.info("暂无数据，请点击上方按钮开始提取，或确保目录下存在 data_log.csv")
 
 if __name__ == "__main__":
-    render_ocr()
+    st.warning("请从主程序 main.py 运行以获取完整功能。以下为测试模式：")
+    # 提供默认值用于测试
+    test_video = "temp_clipped.mp4" 
+    test_roi = (820, 900, 97, 46)
+    if os.path.exists(test_video):
+        render_ocr(test_video, test_roi)
+    else:
+        st.error(f"找不到测试视频 {test_video}")
