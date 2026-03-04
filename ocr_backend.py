@@ -41,19 +41,14 @@ class OcrProcessor:
             text = ""
             score = 0.0
 
-        # 3. 格式化视频时间戳
-        timestamp_str = self._format_timestamp(video_ms)
-        
-        # 4. 生成文件名 (使用帧号和安全的时间字符串)
-        # 注意：文件名中不能包含冒号，所以文件名的时间戳用下划线
-        safe_time_str = timestamp_str.replace(":", "_").replace(".", "_")
-        filename = f"frame_{frame_idx:06d}_{safe_time_str}.jpg"
+        # 3. 生成文件名
+        filename = f"frame_{frame_idx:06d}_{video_ms}.jpg"
         file_path = os.path.join(output_folder, filename)
         
         # 保存 ROI 图片
         cv2.imwrite(file_path, roi_img)
 
-        # 5. 返回数据
+        # 4. 返回数据
         return {
             "video_timestamp": video_ms,
             "frame_idx": frame_idx,
