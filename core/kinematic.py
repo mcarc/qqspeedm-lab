@@ -4,7 +4,7 @@ import re
 import matplotlib.pyplot as plt
 from sklearn.linear_model import RANSACRegressor, LinearRegression
 from sklearn.metrics import r2_score
-from error import NotInitializedError
+from core.exceptions import NotInitializedError
 
 plt.style.use('seaborn-v0_8-whitegrid') # 或者 'ggplot'
 plt.rcParams['font.sans-serif'] = ['DengXian', 'Microsoft YaHei', 'SimHei'] # 设置中文字体优先级

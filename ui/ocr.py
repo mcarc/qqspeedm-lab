@@ -2,8 +2,8 @@ import streamlit as st
 import cv2
 import pandas as pd
 import os
-from ocr_backend import OcrProcessor
-from utils import img_path_to_base64, get_video_frame
+from core.ocr import OcrProcessor
+from core.utils import img_path_to_base64, get_video_frame
 
 # 配置项
 OUTPUT_DIR = "tmp/ocr_results"

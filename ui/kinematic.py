@@ -1,5 +1,5 @@
 import streamlit as st
-from kinematic_backend import KinematicAnalyzer
+from core.kinematic import KinematicAnalyzer
 
 def render_kinematic_analysis(df, video_meta, conf_threshold=0.0, r2_min=0.99, residual_threshold=None):
     """
