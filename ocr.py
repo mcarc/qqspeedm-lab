@@ -67,14 +67,15 @@ def render_ocr(video_path, roi):
     # st.title("📂 视频数值提取")
 
     # --- 1. 初始化 Session State ---
-    if "data_df" not in st.session_state:
-        if os.path.exists(CSV_PATH):
-            try:
-                st.session_state.data_df = pd.read_csv(CSV_PATH)
-            except:
-                st.session_state.data_df = pd.DataFrame()
-        else:
-            st.session_state.data_df = pd.DataFrame()
+    # Has initialized in main.py.
+    # if "data_df" not in st.session_state:
+    #     if os.path.exists(CSV_PATH):
+    #         try:
+    #             st.session_state.data_df = pd.read_csv(CSV_PATH)
+    #         except:
+    #             st.session_state.data_df = pd.DataFrame()
+    #     else:
+    #         st.session_state.data_df = pd.DataFrame()
 
     status_container = st.container()
 
@@ -198,6 +199,8 @@ def render_ocr(video_path, roi):
                 # 5. 保存并更新 Session State
                 final_df.to_csv(CSV_PATH, index=False)
                 st.session_state.data_df = final_df
+                st.session_state.partial_df = save_part_df
+                st.session_state.show_kinematic_module = True # 触发动力分析模块显示
                 
                 st.success(f"✅ 保存成功！已更新 {len(save_part_df)} 条记录，总记录数 {len(final_df)}。")
                 # 稍微延迟后重跑，或者让用户手动刷新，这里不强制 rerun 避免 form 提交后的逻辑中断

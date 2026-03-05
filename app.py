@@ -10,6 +10,7 @@ import numpy as np
 from PIL import Image
 from streamlit_drawable_canvas import st_canvas
 from ocr import render_ocr
+from kinematic import render_kinematic_analysis
 from utils import hms_to_seconds, seconds_to_hms, parse_roi_string
 
 
@@ -94,6 +95,7 @@ def render_sidebar() -> Optional[Path]:
                 # 切换文件时，强制关闭 OCR 模块并清理状态
                 st.session_state['show_ocr_module'] = False
                 st.session_state['current_ocr_coords'] = None
+                st.session_state['show_kinematic_module'] = False
                 if 'data_df' in st.session_state:
                     del st.session_state['data_df'] # 清除子模块的数据缓存
 
@@ -336,6 +338,9 @@ def main():
         st.session_state['show_ocr_module'] = False
     if 'current_ocr_coords' not in st.session_state:
         st.session_state['current_ocr_coords'] = None
+    # 初始化动力分析模块状态
+    if 'show_kinematic_module' not in st.session_state:
+        st.session_state['show_kinematic_module'] = False
 
     selected_path = render_sidebar()
 
@@ -356,6 +361,10 @@ def main():
             st.divider()
             # 传入切片后的视频路径和选定的坐标
             render_ocr(st.session_state['clipped_video_path'], st.session_state['current_ocr_coords'])
+
+            # 步骤 4: 动力分析
+            if st.session_state.get('show_kinematic_module'):
+                render_kinematic_analysis(st.session_state.partial_df, {"name": selected_path.name}, residual_threshold=0.5)
             
     else:
         st.info("👈 请先在左侧侧边栏选择视频源文件夹和文件。")
