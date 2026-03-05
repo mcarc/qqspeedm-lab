@@ -106,6 +106,8 @@ class KinematicAnalyzer:
         metrics = {
             'acceleration': acceleration,
             'v0': v0,
+            'start_velocity': y_inliers[0],
+            'end_velocity': y_inliers[-1],
             'r_squared': r2,
             'inliers_count': len(X_inliers),
             'outliers_count': len(X) - len(X_inliers)
@@ -153,7 +155,9 @@ class KinematicAnalyzer:
         # 更加整洁的指标文本框
         stats_text = (
             f"$\\mathbf{{Stats:}}$\n"
-            f"Acc: {metrics['acceleration']:>8.2f} $(km/h)/s$\n"
+            f"$a$: {metrics['acceleration']:>11.2f} $(km/h)/s$\n"
+            f"$v_0$: {metrics['start_velocity']:>10.1f} km/h\n"
+            f"$v_1$: {metrics['end_velocity']:>10.1f} km/h\n"
             f"$R^2$: {metrics['r_squared']:>10.5f}\n"
             f"Outliers: {metrics['outliers_count']:>4}"
         )
@@ -169,7 +173,24 @@ class KinematicAnalyzer:
         ax.set_xlabel('Time (ms)', fontsize=11, labelpad=10)
         ax.set_ylabel('Velocity (km/h)', fontsize=11, labelpad=10)
 
-        # --- 4. 细节微调 ---
+        # --- 4. 智能坐标轴缩放 (防止异常值撑大视野) ---
+        if not inliers.empty:
+            # 获取内点的范围
+            x_data = inliers['video_timestamp']
+            y_data = inliers['clean_value']
+            
+            x_min_in, x_max_in = x_data.min(), x_data.max()
+            y_min_in, y_max_in = y_data.min(), y_data.max()
+            
+            # 计算留白 (例如 10%)
+            x_margin = (x_max_in - x_min_in) * 0.1 if x_max_in != x_min_in else 1
+            y_margin = (y_max_in - y_min_in) * 0.2 if y_max_in != y_min_in else 1
+            
+            # 设置显示范围，仅参考内点
+            ax.set_xlim(x_min_in - x_margin, x_max_in + x_margin)
+            ax.set_ylim(y_min_in - y_margin, y_max_in + y_margin)
+
+        # --- 5. 细节微调 ---
         ax.legend(frameon=True, facecolor='white', loc='lower right', fontsize=10)
         ax.grid(True, linestyle='--', alpha=0.5, zorder=1)
         

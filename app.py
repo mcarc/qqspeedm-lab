@@ -71,7 +71,7 @@ def reset_canvas():
 
 def render_sidebar() -> Optional[Path]:
     """渲染侧边栏文件选择器"""
-    st.sidebar.header("📁 1. 文件浏览")
+    st.sidebar.header("📁 文件浏览")
     
     if "base_dir" not in st.session_state:
         st.session_state.base_dir = "D:\\Videos"
@@ -364,7 +364,7 @@ def main():
 
             # 步骤 4: 动力分析
             if st.session_state.get('show_kinematic_module'):
-                render_kinematic_analysis(st.session_state.partial_df, {"name": selected_path.name}, residual_threshold=0.5)
+                render_kinematic_analysis(st.session_state.partial_df, {"name": selected_path.name}, residual_threshold=0.3)
             
     else:
         st.info("👈 请先在左侧侧边栏选择视频源文件夹和文件。")

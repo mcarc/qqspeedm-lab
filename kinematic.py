@@ -12,7 +12,7 @@ def render_kinematic_analysis(df, video_meta, conf_threshold=0.0, r2_min=0.99, r
     :param residual_threshold: RANSAC 残差容忍度
     :return: (is_success, clean_df, metrics) 供上层函数做后续业务逻辑判断
     """
-    st.subheader("### 📈 动力数据分析")
+    st.subheader("📈 动力数据分析")
     
     # 1. 实例化分析器
     analyzer = KinematicAnalyzer(
@@ -40,14 +40,16 @@ def render_kinematic_analysis(df, video_meta, conf_threshold=0.0, r2_min=0.99, r
 
     # 5. 使用 Streamlit 原生 Metric 组件展示核心指标
     st.markdown("### 核心指标摘要")
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
-        st.metric(label="加速度", value=f"{metrics['acceleration']:.2f} (km/h)/s")
+        st.metric(label="动力 ($a$)", value=f"{metrics['acceleration']:.2f} (km/h)/s")
     with col2:
-        st.metric(label="初速度 ($v_0$)", value=f"{metrics['v0']:.2f} km/h")
+        st.metric(label="初速度 ($v_0$)", value=f"{metrics['start_velocity']:.1f} km/h")
     with col3:
-        st.metric(label="$R^2$ 拟合优度", value=f"{metrics['r_squared']:.4f}")
+        st.metric(label="末速度 ($v_1$)", value=f"{metrics['end_velocity']:.1f} km/h")
     with col4:
+        st.metric(label="$R^2$ 拟合优度", value=f"{metrics['r_squared']:.6f}")
+    with col5:
         st.metric(label="有效内点 / 离群点", value=f"{metrics['inliers_count']} / {metrics['outliers_count']}")
 
     # 6. 可视化图表渲染
