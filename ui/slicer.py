@@ -10,7 +10,12 @@ def render_slicer(video_path: Path):
     """渲染第一阶段：切片器"""
     st.subheader("✂️ 阶段一：选择时间切片")
     processor = VideoProcessor(video_path)
-    metadata = processor.get_metadata()
+    
+    try:
+        metadata = processor.get_metadata()
+    except Exception as e:
+        st.error(f"无法读取视频信息: {e}")
+        return {}
     
     if not metadata:
         st.error("无法加载视频元数据")

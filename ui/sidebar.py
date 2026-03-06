@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from pathlib import Path
-from typing import Optional, Tuple, Dict
+from typing import Optional
 from ui.utils import reset_canvas
 
 

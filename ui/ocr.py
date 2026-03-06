@@ -1,8 +1,9 @@
 import streamlit as st
-import cv2
+from pathlib import Path
 import pandas as pd
 import os
 from core.ocr import OcrProcessor
+from core.video import VideoProcessor
 from core.utils import img_path_to_base64, get_video_frame
 
 # 配置项
@@ -13,54 +14,40 @@ CSV_PATH = os.path.join(OUTPUT_DIR, "data_log.csv")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 @st.cache_resource
-def get_processor():
+def get_frame_processor():
     return OcrProcessor()
 
-def process_video(processor, video_path, roi, status_container):
-    """执行耗时的视频处理逻辑"""
-    try:
-        cap = cv2.VideoCapture(video_path)
-        if not cap.isOpened():
-            st.error(f"无法打开视频源: {video_path}")
-            return None
-    except Exception as e:
-        st.error(f"视频源错误: {e}")
-        return None
+import streamlit as st
 
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    if total_frames <= 0: total_frames = 100
-    
+def render_video_processor(video_processor: VideoProcessor, frame_processor: OcrProcessor, roi, status_container, output_dir):
+    """
+    前端 UI 逻辑：接收后端生成器的数据并刷新界面。
+    """
     progress_bar = status_container.progress(0, text="准备开始...")
-    
     data_list = []
-    frame_idx = 0
     
-    while cap.isOpened():
-        current_video_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
-        ret, frame = cap.read()
-        if not ret:
-            break
+    try:
+        # 遍历 VideoProcessor 抛出的状态流
+        for step_info in video_processor.process_frames_generator(frame_processor, roi, output_dir):
+            result = step_info["result"]
+            frame_idx = step_info["frame_idx"]
+            
+            # 收集有效数据
+            if result.get('value', '').strip():
+                data_list.append(result)
+            
+            # 控制 UI 刷新频率，避免卡顿 (每 10 帧更新一次 UI)
+            if frame_idx % 10 == 0:
+                prog = step_info["progress"]
+                progress_bar.progress(prog, text=f"处理中... 视频时间: {result.get('video_timestamp', 0)}")
+                
+        progress_bar.progress(1.0, text="✅ 处理完成！")
+        return data_list
         
-        result = processor.process_and_save(
-            frame, 
-            roi, 
-            OUTPUT_DIR, 
-            current_video_ms,
-            frame_idx
-        )
-        
-        if result['value'].strip():
-            data_list.append(result)
-        
-        frame_idx += 1
-        
-        if frame_idx % 10 == 0:
-            prog = min(frame_idx / total_frames, 1.0)
-            progress_bar.progress(prog, text=f"处理中... 视频时间: {result.get('video_timestamp', 0)}")
-
-    cap.release()
-    progress_bar.progress(1.0, text="✅ 处理完成！")
-    return data_list
+    except Exception as e:
+        # 统一在前端捕获并展示错误信息
+        st.error(f"视频处理异常: {e}")
+        return None
 
 def render_ocr(video_path, roi):
     # st.set_page_config(page_title="OCR 批处理工具", layout="wide")
@@ -99,10 +86,12 @@ def render_ocr(video_path, roi):
     if should_run:
         # 使用 spinner 做一个极简的加载提示，不占用进度条位置
         with st.spinner("正在后台提取数值..."):
-            processor = get_processor()
+            frame_processor = get_frame_processor()
             
-            new_data = process_video(processor, video_path, roi, status_container)
-            
+            # new_data = process_video(processor, video_path, roi, status_container)
+            video_processor = VideoProcessor(Path(video_path))
+            new_data = render_video_processor(video_processor, frame_processor, roi, status_container, OUTPUT_DIR)
+
             if new_data:
                 df = pd.DataFrame(new_data)
                 df.to_csv(CSV_PATH, index=False)

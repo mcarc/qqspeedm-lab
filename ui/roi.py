@@ -1,16 +1,9 @@
-import os
 import streamlit as st
-import subprocess
-import cv2
-import shutil
-import pandas as pd
 from pathlib import Path
-from typing import Optional, Tuple, Dict
-import numpy as np
 from PIL import Image
 from streamlit_drawable_canvas import st_canvas
 from ui.utils import reset_canvas
-from core.utils import hms_to_seconds, seconds_to_hms, parse_roi_string
+from core.utils import parse_roi_string
 from core.video import VideoProcessor
 
 # 1. 提取常量：避免每次函数调用时重复创建
@@ -22,35 +15,20 @@ ROI_PRESETS = {
 }
 
 # 2. 抽离视频读取逻辑并使用缓存：极大提升 UI 流畅度
-@st.cache_data(show_spinner=False, max_entries=5)
-def get_video_first_frame(video_path: str):
-    """读取视频第一帧并缓存，避免 Streamlit 频繁触发磁盘 I/O"""
-    cap = cv2.VideoCapture(video_path)
-    ret, frame = cap.read()
-    cap.release()
-    
-    if not ret:
-        return None
-    return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
 @st.cache_data(show_spinner=False)
 def get_video_frame_count(video_path: str) -> int:
     """获取视频总帧数并缓存"""
-    cap = cv2.VideoCapture(video_path)
-    count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    cap.release()
-    return count
+    processor = VideoProcessor(Path(video_path))
+    return processor.get_video_frame_count()
 
 @st.cache_data(show_spinner=False, max_entries=20)
 def get_video_frame(video_path: str, frame_no: int):
     """读取指定帧并缓存，避免拖动 slider 和画框时重复读取硬盘"""
-    cap = cv2.VideoCapture(video_path)
-    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_no)
-    ret, frame = cap.read()
-    cap.release()
-    if not ret:
-        return None
-    return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    processor = VideoProcessor(Path(video_path))
+    return processor.get_video_frame(frame_no)
+
+
 
 def render_preset_selector(clipped_video_path: str):
     """
@@ -86,7 +64,7 @@ def render_preset_selector(clipped_video_path: str):
     st.success(f"坐标解析成功: X={x}, Y={y}, W={w}, H={h}")
     
     # 获取视频帧
-    frame_rgb = get_video_first_frame(clipped_video_path)
+    frame_rgb = get_video_frame(clipped_video_path, 0)
     if frame_rgb is None:
         st.error("无法读取视频画面，请检查视频文件是否有效。")
         return
