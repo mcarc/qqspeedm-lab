@@ -43,20 +43,3 @@ def img_path_to_base64(file_path):
         return f"data:image/jpeg;base64,{encoded}"
     except Exception:
         return None
-
-def get_video_frame(video_path, frame_idx):
-    """读取视频指定帧并转换为用于 st.image 显示的格式"""
-    if not os.path.exists(video_path):
-        return None
-    try:
-        cap = cv2.VideoCapture(video_path)
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-        ret, frame = cap.read()
-        cap.release()
-        if ret:
-            # OpenCV 默认为 BGR，Streamlit 需要 RGB
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            return frame
-        return None
-    except Exception:
-        return None

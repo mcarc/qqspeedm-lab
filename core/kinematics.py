@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import re
 import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 from sklearn.linear_model import RANSACRegressor, LinearRegression
 from sklearn.metrics import r2_score
 from core.exceptions import NotInitializedError
@@ -100,12 +101,10 @@ class KinematicAnalyzer:
         # 计算评估指标
         y_pred = final_model.predict(X_inliers)
         r2 = r2_score(y_inliers, y_pred)
-        acceleration = final_model.coef_[0] * 1000
-        v0 = final_model.intercept_
+        acceleration = final_model.coef_[0] * 1000 # 转换为 (km/h)/s 单位
 
         metrics = {
             'acceleration': acceleration,
-            'v0': v0,
             'start_velocity': y_inliers[0],
             'end_velocity': y_inliers[-1],
             'r_squared': r2,
@@ -118,7 +117,7 @@ class KinematicAnalyzer:
         
         return is_success, clean_df, metrics
 
-    def plot_vt_graph(self, clean_df, metrics, title=None):
+    def plot_static(self, clean_df, metrics, title=None):
         if self.model is None:
             raise NotInitializedError("没有可用的模型进行绘制。")
 
@@ -201,11 +200,137 @@ class KinematicAnalyzer:
         plt.tight_layout()
         return fig
 
+    def plot_interactive(self, clean_df, metrics, title=None):
+        if self.model is None:
+            raise NotInitializedError("没有可用的模型进行绘制。")
+
+        # --- 1. 风格设置与数据准备 ---
+        color_inlier = '#2471A3'  # 深蓝色
+        color_outlier = '#E74C3C' # 珊瑚红
+        color_line = '#27AE60'    # 翡翠绿
+
+        inliers = clean_df[clean_df['is_inlier']]
+        outliers = clean_df[~clean_df['is_inlier']]
+
+        fig = go.Figure()
+
+
+        # --- 2. 绘制数据 ---
+        # 内点：圆点，带白色细边框
+        fig.add_trace(go.Scatter(
+            x=inliers['video_timestamp'].tolist(), 
+            y=inliers['clean_value'].tolist(),
+            mode='markers',
+            name='Valid points',
+            marker=dict(
+                color=color_inlier, 
+                size=7, 
+                opacity=0.6, 
+                line=dict(color='white', width=1)
+            ),
+            hovertemplate="Time: %{x:.1f} ms<br>Velocity: %{y:.2f} km/h<extra></extra>"
+        ))
+
+        # 外点：叉号，稍微淡化
+        fig.add_trace(go.Scatter(
+            x=outliers['video_timestamp'].tolist(), 
+            y=outliers['clean_value'].tolist(),
+            mode='markers',
+            name='Outliers',
+            marker=dict(
+                color=color_outlier, 
+                size=8, 
+                symbol='x', 
+                opacity=0.8
+            ),
+            hovertemplate="Time: %{x:.1f} ms<br>Velocity: %{y:.2f} km/h<extra></extra>"
+        ))
+
+        # 拟合直线
+        x_min, x_max = clean_df['video_timestamp'].min(), clean_df['video_timestamp'].max()
+        line_x = np.array([[x_min], [x_max]])
+        line_y = self.model.predict(line_x).flatten() # 展平以匹配 Plotly 要求
+        
+        print(f"{line_x.flatten()}, {line_y}")
+
+        fig.add_trace(go.Scatter(
+            x=line_x.flatten().tolist(), 
+            y=line_y.tolist(),
+            mode='lines',
+            name='Linear Fit',
+            line=dict(color=color_line, width=2.5)
+        ))
+
+        # --- 3. 装饰与标注 ---
+        # Plotly 注释支持 HTML 标签，用于格式化下标和上标
+        stats_text = (
+            f"<b>Stats:</b><br>"
+            f"a: {metrics['acceleration']:>9.2f} (km/h)/s<br>"
+            f"v<sub>0</sub>: {metrics['start_velocity']:>8.1f} km/h<br>"
+            f"v<sub>1</sub>: {metrics['end_velocity']:>8.1f} km/h<br>"
+            f"R<sup>2</sup>: {metrics['r_squared']:>8.6f}<br>"
+            f"Outliers: {metrics['outliers_count']}"
+        )
+
+        # 在左上角添加统计文本框
+        fig.add_annotation(
+            xref="paper", yref="paper",
+            x=0.02, y=0.98,
+            text=stats_text,
+            showarrow=False,
+            font=dict(family="monospace", size=12, color="#333333"),
+            align="left",
+            bgcolor="rgba(255, 255, 255, 0.9)",
+            bordercolor="#CCCCCC",
+            borderwidth=1,
+            borderpad=6
+        )
+
+        # --- 4. 智能坐标轴缩放 (防止异常值撑大视野) ---
+        x_range, y_range = None, None
+        if not inliers.empty:
+            x_min_in, x_max_in = inliers['video_timestamp'].min(), inliers['video_timestamp'].max()
+            y_min_in, y_max_in = inliers['clean_value'].min(), inliers['clean_value'].max()
+            
+            x_margin = (x_max_in - x_min_in) * 0.1 if x_max_in != x_min_in else 1
+            y_margin = (y_max_in - y_min_in) * 0.2 if y_max_in != y_min_in else 1
+            
+            x_range = [x_min_in - x_margin, x_max_in + x_margin]
+            y_range = [y_min_in - y_margin, y_max_in + y_margin]
+
+        # --- 5. 整体布局微调 ---
+        final_title = title if title else f"V-T Analysis: {self.video_meta.get('name', 'Unknown')}"
+        
+        fig.update_layout(
+            title=dict(text=final_title, font=dict(size=18), x=0.02),
+            xaxis_title="Time (ms)",
+            yaxis_title="Velocity (km/h)",
+            plot_bgcolor='white', # 移除默认的灰色背景
+            xaxis=dict(
+                range=x_range,
+                showgrid=True,
+                gridcolor='rgba(0,0,0,0.1)',
+                zeroline=False
+            ),
+            yaxis=dict(
+                range=y_range,
+                showgrid=True,
+                gridcolor='rgba(0,0,0,0.1)',
+                zeroline=False
+            ),
+            legend=dict(
+                x=0.98, y=0.02,
+                xanchor='right', yanchor='bottom',
+                font=dict(color='#333333'),
+                bgcolor='rgba(255,255,255,0.9)',
+                bordercolor='#CCCCCC',
+                borderwidth=1
+            ),
+            margin=dict(l=60, r=40, t=60, b=50)
+        )
+
+        return fig
+
     def _fallback_analysis(self, clean_df):
         """如果拟合失败（比如 R² 太低）的后备方案"""
         raise NotImplementedError("拟合失败的后备分析方案尚未实现。")
-        # print("警告：线性拟合效果不佳，可能不符合匀加速模型或噪声过大。")
-        # 这里可以加入滑动平均 (Rolling Mean) 或多项式拟合的代码
-        # 供人工审查使用
-        # clean_df['smoothed_v'] = clean_df['clean_value'].rolling(window=5, center=True).mean()
-        # pass

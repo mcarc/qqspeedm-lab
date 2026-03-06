@@ -1,5 +1,5 @@
 import streamlit as st
-from core.kinematic import KinematicAnalyzer
+from core.kinematics import KinematicAnalyzer
 
 def render_kinematic_analysis(df, video_meta, conf_threshold=0.0, r2_min=0.99, residual_threshold=None):
     """
@@ -55,12 +55,11 @@ def render_kinematic_analysis(df, video_meta, conf_threshold=0.0, r2_min=0.99, r
     # 6. 可视化图表渲染
     st.markdown("### 速度-时间 (V-T) 拟合图")
     # 因为您的 plot_vt_graph 已经修改为返回 fig，直接接收并用 st.pyplot 渲染
-    fig = analyzer.plot_vt_graph(clean_df, metrics)
+    # fig = analyzer.plot_static(clean_df, metrics)
+    fig = analyzer.plot_interactive(clean_df, metrics)
     
     if fig is not None:
-        st.pyplot(fig)
-        # 渲染后清理内存，防止在 Streamlit 长时间运行中出现内存泄漏
-        # fig.clf() 
+        st.plotly_chart(fig, use_container_width=True, theme=None)
     else:
         st.error("未能生成可视化图表。")
 

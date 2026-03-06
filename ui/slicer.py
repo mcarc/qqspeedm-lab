@@ -10,7 +10,7 @@ def render_slicer(video_path: Path):
     """渲染第一阶段：切片器"""
     st.subheader("✂️ 阶段一：选择时间切片")
     processor = VideoProcessor(video_path)
-    
+
     try:
         metadata = processor.get_metadata()
     except Exception as e:
@@ -45,7 +45,7 @@ def render_slicer(video_path: Path):
 
         with st.spinner("FFmpeg 正在处理..."):
             os.makedirs("tmp", exist_ok=True)
-            success, msg = processor.slice_video(start_str, end_str, output_path="tmp/clipped.mp4")
+            success, msg = processor.slice_video(t1, t2, output_path="tmp/clipped.mp4")
             if success:
                 st.session_state['clipped_video_path'] = msg
                 reset_canvas()

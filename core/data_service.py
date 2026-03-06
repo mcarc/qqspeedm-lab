@@ -9,6 +9,11 @@ class DataService:
         return df is not None and not df.empty
     
     @staticmethod
+    def reset_data():
+        """重置数据状态，清空 DataFrame"""
+        return pd.DataFrame()
+    
+    @staticmethod
     def get_frame_range(df: pd.DataFrame):
         """获取数据的最小和最大帧号"""
         if df is None or df.empty:

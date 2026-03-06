@@ -28,8 +28,6 @@ def get_video_frame(video_path: str, frame_no: int):
     processor = VideoProcessor(Path(video_path))
     return processor.get_video_frame(frame_no)
 
-
-
 def render_preset_selector(clipped_video_path: str):
     """
     渲染预设坐标输入界面。

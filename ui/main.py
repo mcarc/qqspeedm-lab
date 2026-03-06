@@ -1,23 +1,10 @@
 import streamlit as st
+from ui.utils import reset_app_state
 from ui.sidebar import render_sidebar
 from ui.slicer import render_slicer
 from ui.roi import render_roi_selector
 from ui.ocr import render_ocr
-from ui.kinematic import render_kinematic_analysis
-
-def init_session_state():
-    """集中处理所有 session_state 的初始化"""
-    defaults = {
-        'crop_stage': 'full',
-        'zoom_coords': None,
-        'clipped_video_path': None,
-        'show_ocr_module': False,
-        'current_ocr_coords': None,
-        'show_kinematic_module': False
-    }
-    for key, value in defaults.items():
-        if key not in st.session_state:
-            st.session_state[key] = value
+from ui.kinematics import render_kinematic_analysis
 
 # ================= 主函数 =================
 def execute_video_pipeline():
@@ -25,7 +12,7 @@ def execute_video_pipeline():
     st.title("🎬 实验室")
     
     # 1. 状态初始化
-    init_session_state()
+    reset_app_state()
 
     # 2. 侧边栏渲染
     selected_path = render_sidebar()

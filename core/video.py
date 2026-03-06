@@ -33,8 +33,8 @@ class VideoProcessor:
 
         cmd = [
             'ffmpeg', '-y',
-            '-ss', start_time,
-            '-to', end_time,
+            '-ss', str(start_time),
+            '-to', str(end_time),
             '-i', str(self.file_path),
             '-c', 'copy',
             '-avoid_negative_ts', '1',
