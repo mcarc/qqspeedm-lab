@@ -1,19 +1,62 @@
 import streamlit as st
 from core.kinematics import KinematicAnalyzer
+from core.data_service import ExperimentDataManager
 
-def render_kinematic_analysis(df, video_meta, conf_threshold=0.0, r2_min=0.99, residual_threshold=None):
+def render_kinematic_analysis(df):
     """
     供上层 Streamlit 调用的运动学分析组件。
     
     :param df: 包含 'value', 'video_timestamp' (可能包含 'confidence') 的 DataFrame
-    :param video_meta: 视频元数据字典
-    :param conf_threshold: OCR 置信度过滤阈值
-    :param r2_min: 最小 R² 分数要求
-    :param residual_threshold: RANSAC 残差容忍度
     :return: (is_success, clean_df, metrics) 供上层函数做后续业务逻辑判断
     """
     st.subheader("📈 动力数据分析")
     
+    video_meta = {
+        'path': st.session_state.get('current_source_file_path', '未知视频'),
+        'name': st.session_state.get('current_source_filename', '未知视频'),
+        'clipped_time_range': st.session_state.get('clipped_time_range'),
+        'selected_frame_range': st.session_state.get('selected_frame_range'),
+        'ocr_coords': st.session_state.get('current_ocr_coords'),
+    }
+
+    with st.expander("⚙️ 高级分析参数设置", expanded=False):
+        col_p1, col_p2, col_p3 = st.columns(3)
+        
+        with col_p1:
+            conf_threshold = st.number_input(
+                "置信度阈值 (conf_threshold)", 
+                min_value=0.0, 
+                max_value=1.0, 
+                value=0.0, 
+                step=0.05,
+                help="用于过滤低置信度数据的阈值（0.0 - 1.0）"
+            )
+            
+        with col_p2:
+            r2_min = st.number_input(
+                "R² 最小阈值 (r2_min)", 
+                min_value=0.0, 
+                max_value=1.0, 
+                value=0.999, 
+                step=0.001,
+                help="判断线性拟合是否成功的最小 R² 决定系数"
+            )
+            
+        with col_p3:
+            residual_threshold = st.number_input(
+                "残差阈值 (residual_threshold)", 
+                min_value=0.0, 
+                value=0.3, 
+                step=0.1,
+                help="RANSAC 算法用于区分内点和离群点的残差阈值"
+            )
+
+    exp_params = {
+        "conf_threshold": conf_threshold,
+        "r2_min": r2_min,
+        "residual_threshold": residual_threshold
+    }
+
     # 1. 实例化分析器
     analyzer = KinematicAnalyzer(
         video_meta=video_meta,
@@ -62,6 +105,18 @@ def render_kinematic_analysis(df, video_meta, conf_threshold=0.0, r2_min=0.99, r
         st.plotly_chart(fig, use_container_width=True, theme=None)
     else:
         st.error("未能生成可视化图表。")
+
+    # 7. 实验数据管理
+    static_fig = analyzer.plot_static(clean_df, metrics)
+
+    records_to_save = {
+        "video_meta": video_meta, # convert tuple to list
+        "exp_params": exp_params,
+        "metrics": metrics,
+    }
+
+    exp_manager = ExperimentDataManager()
+    exp_manager.save_all_results(clean_df, records_to_save, static_fig)
 
     # 将结果返回给上层，方便进行数据保存或跨组件联动
     return is_success, clean_df, metrics

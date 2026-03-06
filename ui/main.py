@@ -1,5 +1,5 @@
 import streamlit as st
-from ui.utils import reset_app_state
+from ui.utils import init_app_state
 from ui.sidebar import render_sidebar
 from ui.slicer import render_slicer
 from ui.roi import render_roi_selector
@@ -12,7 +12,7 @@ def execute_video_pipeline():
     st.title("🎬 实验室")
     
     # 1. 状态初始化
-    reset_app_state()
+    init_app_state()
 
     # 2. 侧边栏渲染
     selected_path = render_sidebar()
@@ -39,8 +39,8 @@ def execute_video_pipeline():
 
         # 步骤 4: 动力分析
         if st.session_state.get('show_kinematic_module'):
-            # 注意：确保 partial_df 在到达这里时已经被正确赋值并存在于 session_state 中
-            render_kinematic_analysis(st.session_state.partial_df, {"name": selected_path.name}, residual_threshold=0.3)
+            # 注意：确保 selected_df 在到达这里时已经被正确赋值并存在于 session_state 中
+            render_kinematic_analysis(st.session_state.selected_df)
 
 if __name__ == "__main__":
     execute_video_pipeline()

@@ -36,16 +36,19 @@ def render_slicer(video_path: Path):
         do_slice = st.button("🚀 生成切片", type="primary", use_container_width=True)
 
     if do_slice:
-        t1 = hms_to_seconds(start_str)
-        t2 = hms_to_seconds(end_str)
-        
-        if t1 is None or t2 is None or t1 >= t2:
+        t1_sec = hms_to_seconds(start_str)
+        t2_sec = hms_to_seconds(end_str)
+        t1 = seconds_to_hms(t1_sec) if t1_sec is not None else "Invalid"
+        t2 = seconds_to_hms(t2_sec) if t2_sec is not None else "Invalid"
+        st.session_state['clipped_time_range'] = (t1, t2)  # 存储切片时间范围，供后续阶段使用
+
+        if t1_sec is None or t2_sec is None or t1_sec >= t2_sec:
             st.error("时间格式错误或开始时间大于结束时间")
             return
 
         with st.spinner("FFmpeg 正在处理..."):
             os.makedirs("tmp", exist_ok=True)
-            success, msg = processor.slice_video(t1, t2, output_path="tmp/clipped.mp4")
+            success, msg = processor.slice_video(t1_sec, t2_sec, output_path="tmp/clipped.mp4")
             if success:
                 st.session_state['clipped_video_path'] = msg
                 reset_canvas()

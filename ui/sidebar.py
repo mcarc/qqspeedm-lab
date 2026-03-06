@@ -1,7 +1,7 @@
 import streamlit as st
 from pathlib import Path
 from typing import Optional
-from ui.utils import reset_app_state
+from ui.utils import init_app_state
 
 DEFAULT_BASE_DIR = "D:\\Videos"
 VIDEO_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv', '.flv'}
@@ -42,7 +42,7 @@ def render_sidebar() -> Optional[Path]:
     
     # 检查是否切换了文件
     current_file_str = str(selected_path)
-    if st.session_state.get('current_source_file') != current_file_str:
-        reset_app_state(current_file_str)
+    if st.session_state.get('current_source_file_path') != current_file_str:
+        init_app_state(current_file_str, force_reset=True)  # 切换文件时重置状态
         
     return selected_path

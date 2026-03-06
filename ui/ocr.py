@@ -16,8 +16,6 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 def get_frame_processor():
     return OcrProcessor()
 
-import streamlit as st
-
 def render_video_processor(video_processor: VideoProcessor, frame_processor: OcrProcessor, roi, status_container, output_dir):
     """
     前端 UI 逻辑：接收后端生成器的数据并刷新界面。
@@ -154,7 +152,8 @@ def render_ocr(video_path, roi):
             
             # 更新 Session State (状态管理仍然留在前端)
             st.session_state.data_df = final_df
-            st.session_state.partial_df = save_part_df
+            st.session_state.selected_df = save_part_df
+            st.session_state.selected_frame_range = (sel_start, sel_end)
             st.session_state.show_kinematic_module = True 
             
             st.success(f"✅ 保存成功！已更新 {len(save_part_df)} 条记录，总记录数 {len(final_df)}。")

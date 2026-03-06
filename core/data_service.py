@@ -1,6 +1,11 @@
 import pandas as pd
+import numpy as np
 import os
 from core.utils import img_path_to_base64
+import yaml
+import pandas as pd
+from datetime import datetime
+import matplotlib.pyplot as plt
 
 class DataService:
     @staticmethod
@@ -81,3 +86,92 @@ class DataService:
         final_df.to_csv(csv_path, index=False)
 
         return final_df, save_part_df
+
+class ExperimentDataManager:
+    """
+    负责实验数据的持久化存储。
+    默认目录结构（扁平化）：
+    base_dir/
+      └── experiment_name (默认为时间戳)/
+          ├── selected_data.csv
+          ├── vt_plot.pdf
+          └── records.yaml
+    """
+
+    def __init__(self, base_dir: str = "experiment_results", experiment_name: str = None):
+        self.base_dir = base_dir
+        # 如果没有提供实验名称，默认使用当前时间戳保证唯一性
+        self.experiment_name = experiment_name or datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.exp_dir = os.path.join(self.base_dir, self.experiment_name)
+        
+        # 初始化时自动创建主目录
+        self._setup_directories()
+
+    @staticmethod
+    def _sanitize_data(data):
+        """
+        递归处理字典、列表和元组，将 NumPy 类型转换为 Python 标准类型，
+        并将元组转换为列表，以便于 YAML/JSON 序列化。
+        """
+        if isinstance(data, dict):
+            return {k: ExperimentDataManager._sanitize_data(v) for k, v in data.items()}
+        elif isinstance(data, (list, tuple, set)):
+            return [ExperimentDataManager._sanitize_data(v) for v in data]
+        elif isinstance(data, (np.float32, np.float64)):
+            return float(data)
+        elif isinstance(data, (np.int32, np.int64)):
+            return int(data)
+        elif isinstance(data, np.ndarray):
+            return ExperimentDataManager._sanitize_data(data.tolist())
+        else:
+            return data
+
+    def _setup_directories(self):
+        """创建实验主目录，取消了内部的分类文件夹以保持扁平化。"""
+        os.makedirs(self.exp_dir, exist_ok=True)
+
+    def save_dataframe(self, df: pd.DataFrame, filename: str = "selected_data.csv") -> str:
+        """保存 DataFrame 为 CSV 文件。"""
+        if df is None or df.empty:
+            return None
+        
+        filepath = os.path.join(self.exp_dir, filename)
+        df.to_csv(filepath, index=False, encoding='utf-8-sig')
+        return filepath
+
+    def save_records(self, records: dict, filename: str = "records.yaml") -> str:
+        """保存字典格式的记录数据为 YAML 文件。"""
+        if not records:
+            return None
+
+        # 🌟 在这里进行数据清洗
+        clean_records = self._sanitize_data(records)
+
+        filepath = os.path.join(self.exp_dir, filename)
+        with open(filepath, 'w', encoding='utf-8') as f:
+            # allow_unicode=True 保证中文正常显示
+            # sort_keys=False 保持字典写入时的原有顺序
+            # default_flow_style=False 确保输出为标准的层级块状 YAML 格式
+            yaml.dump(clean_records, f, allow_unicode=True, sort_keys=False, default_flow_style=False)
+        return filepath
+
+    def save_figure(self, fig: plt.Figure, filename: str = "vt_plot.pdf") -> str:
+        """保存 Matplotlib Figure 为 PDF。"""
+        if fig is None:
+            return None
+            
+        filepath = os.path.join(self.exp_dir, filename)
+        # 保存为 PDF，支持高质量矢量图
+        fig.savefig(filepath, format='pdf', bbox_inches='tight', dpi=300)
+        return filepath
+
+    def save_all_results(self, df: pd.DataFrame, records: dict, fig: plt.Figure) -> dict:
+        """
+        一键保存所有实验数据，返回保存的文件路径字典。
+        """
+        saved_paths = {
+            "data_path": self.save_dataframe(df),
+            "records_path": self.save_records(records),
+            "plot_path": self.save_figure(fig)
+        }
+        return saved_paths

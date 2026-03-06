@@ -1,5 +1,6 @@
 ocr_results/
 archive/
-/**/__pycache__/
+experiment_results/
+**/__pycache__/
 *.mp4
 *.log
