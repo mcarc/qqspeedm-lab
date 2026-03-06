@@ -1,10 +1,9 @@
 import streamlit as st
 from pathlib import Path
-import pandas as pd
 import os
 from core.ocr import OcrProcessor
 from core.video import VideoProcessor
-from core.utils import img_path_to_base64, get_video_frame
+from core.data_service import DataService
 
 # 配置项
 OUTPUT_DIR = "tmp/ocr_results"
@@ -50,30 +49,15 @@ def render_video_processor(video_processor: VideoProcessor, frame_processor: Ocr
         return None
 
 def render_ocr(video_path, roi):
-    # st.set_page_config(page_title="OCR 批处理工具", layout="wide")
-    # st.title("📂 视频数值提取")
-
-    # --- 1. 初始化 Session State ---
-    # Has initialized in main.py.
-    # if "data_df" not in st.session_state:
-    #     if os.path.exists(CSV_PATH):
-    #         try:
-    #             st.session_state.data_df = pd.read_csv(CSV_PATH)
-    #         except:
-    #             st.session_state.data_df = pd.DataFrame()
-    #     else:
-    #         st.session_state.data_df = pd.DataFrame()
 
     status_container = st.container()
 
-    # --- 2. 自动触发与重跑控制区 ---
+    # --- 1. 自动触发与重跑控制区 ---
     
     # 逻辑开关
-    should_run = False
-    
     # 情况 A：Session 中完全没有数据（初次进入或被主模块清空）
-    if st.session_state.data_df.empty:
-        should_run = True
+    is_data_ready = DataService.has_records(st.session_state.data_df)
+    should_run = not is_data_ready
 
     # 情况 B：保留手动强制重跑按钮
     # 放在顶部的角落，或者数据编辑区的上方
@@ -93,20 +77,18 @@ def render_ocr(video_path, roi):
             new_data = render_video_processor(video_processor, frame_processor, roi, status_container, OUTPUT_DIR)
 
             if new_data:
-                df = pd.DataFrame(new_data)
-                df.to_csv(CSV_PATH, index=False)
+                df = DataService.save_new_data(new_data, CSV_PATH)
                 st.session_state.data_df = df
                 st.rerun() # 跑完直接刷新，进入结果展示阶段
             else:
                 st.error("未能提取到有效数据，请检查 ROI 区域。")
 
-    # --- 3. 结果展示与编辑区 ---
-    if not st.session_state.data_df.empty:
+    # --- 2. 结果展示与编辑区 ---
+    if DataService.has_records(st.session_state.data_df):
         st.subheader("🔍 范围选择与预览")
 
         df_all = st.session_state.data_df
-        min_f = int(df_all['frame_idx'].min())
-        max_f = int(df_all['frame_idx'].max())
+        min_f, max_f = DataService.get_frame_range(df_all)
 
         # --- 新增布局：左侧预览，右侧控制 ---
         preview_col, control_col = st.columns([1, 1])
@@ -121,12 +103,13 @@ def render_ocr(video_path, roi):
             if sel_start > sel_end:
                 st.warning("起始帧不能大于结束帧")
                 sel_end = sel_start
-            
-            st.info(f"当前选中范围包含 {len(df_all[(df_all['frame_idx'] >= sel_start) & (df_all['frame_idx'] <= sel_end)])} 条数据")
+
+            st.info(f"当前选中范围包含 {DataService.get_selected_length(df_all, sel_start, sel_end)} 条数据")
 
         with preview_col:
             # 获取起始帧的完整画面
-            preview_img = get_video_frame(video_path, sel_start)
+            video_processor = VideoProcessor(Path(video_path))
+            preview_img = video_processor.get_video_frame(sel_start)
             if preview_img is not None:
                 st.image(preview_img, caption=f"当前起始帧: {sel_start} (完整画面)", use_column_width=True)
             else:
@@ -135,65 +118,46 @@ def render_ocr(video_path, roi):
         st.divider()
         st.subheader("📝 选中范围内数据编辑")
 
-        # --- 数据过滤逻辑 ---
-        # 仅筛选出范围内的数据用于显示和编辑
-        mask = (df_all['frame_idx'] >= sel_start) & (df_all['frame_idx'] <= sel_end)
-        filtered_df = df_all[mask].copy()
+        # 调用 DataService 处理展示数据
+        filtered_df, display_df = DataService.prepare_display_data(df_all, sel_start, sel_end)
 
-        if filtered_df.empty:
+        if not DataService.has_records(display_df):
             st.warning("当前范围内没有数据。")
-        else:
-            # 构造显示用的 DataFrame (增加 base64 图片列)
-            display_df = filtered_df.copy()
-            display_df['value'] = display_df['value'].astype(str)
+            return
+
+        with st.form(key="editor_form"):
+            edited_filtered_df = st.data_editor(
+                display_df,
+                column_config={
+                    "image_display": st.column_config.ImageColumn("ROI截图", width=120),
+                    "video_timestamp": st.column_config.TextColumn("视频时间", disabled=True),
+                    "value": st.column_config.TextColumn("识别数值", required=True),
+                    "confidence": st.column_config.ProgressColumn("置信度", format="%.2f", min_value=0, max_value=1),
+                    "frame_idx": st.column_config.NumberColumn("帧号", disabled=True),
+                },
+                column_order=["frame_idx", "video_timestamp", "image_display", "value", "confidence"],
+                use_container_width=True,
+                num_rows="dynamic"
+            )
+
+            submit_btn = st.form_submit_button("💾 保存范围修正结果", type="primary")
+
+        # --- 3. 保存逻辑交由 DataService 处理 ---
+        if submit_btn:
+            final_df, save_part_df = DataService.merge_and_save_edits(
+                original_df=df_all,
+                edited_df=edited_filtered_df,
+                start_f=sel_start,
+                end_f=sel_end,
+                csv_path=CSV_PATH
+            )
             
-            if 'file_path' in display_df.columns:
-                display_df['image_display'] = display_df['file_path'].apply(img_path_to_base64)
-
-            with st.form(key="editor_form"):
-                edited_filtered_df = st.data_editor(
-                    display_df,
-                    column_config={
-                        "image_display": st.column_config.ImageColumn("ROI截图", width=120),
-                        "video_timestamp": st.column_config.TextColumn("视频时间", disabled=True),
-                        "value": st.column_config.TextColumn("识别数值", required=True),
-                        "confidence": st.column_config.ProgressColumn("置信度", format="%.2f", min_value=0, max_value=1),
-                        "frame_idx": st.column_config.NumberColumn("帧号", disabled=True),
-                    },
-                    column_order=["frame_idx", "video_timestamp", "image_display", "value", "confidence"],
-                    use_container_width=True,
-                    num_rows="dynamic"
-                )
-
-                submit_btn = st.form_submit_button("💾 保存范围修正结果", type="primary")
-
-            # --- 4. 保存逻辑 (拼接回未选中部分) ---
-            if submit_btn:
-                # 1. 处理编辑后的数据：移除临时的图片显示列
-                if 'image_display' in edited_filtered_df.columns:
-                    save_part_df = edited_filtered_df.drop(columns=['image_display'])
-                else:
-                    save_part_df = edited_filtered_df
-
-                # 2. 获取未被选中的数据 (Outside the mask)
-                # 注意：使用原始 df_all 的 mask 取反
-                remaining_df = df_all[~mask]
-
-                # 3. 拼接：未选中部分 + 编辑过的部分
-                final_df = pd.concat([remaining_df, save_part_df])
-                
-                # 4. 按帧号重新排序，确保数据顺序正确
-                final_df = final_df.sort_values(by="frame_idx")
-
-                # 5. 保存并更新 Session State
-                final_df.to_csv(CSV_PATH, index=False)
-                st.session_state.data_df = final_df
-                st.session_state.partial_df = save_part_df
-                st.session_state.show_kinematic_module = True # 触发动力分析模块显示
-                
-                st.success(f"✅ 保存成功！已更新 {len(save_part_df)} 条记录，总记录数 {len(final_df)}。")
-                # 稍微延迟后重跑，或者让用户手动刷新，这里不强制 rerun 避免 form 提交后的逻辑中断
-                # st.rerun() 
+            # 更新 Session State (状态管理仍然留在前端)
+            st.session_state.data_df = final_df
+            st.session_state.partial_df = save_part_df
+            st.session_state.show_kinematic_module = True 
+            
+            st.success(f"✅ 保存成功！已更新 {len(save_part_df)} 条记录，总记录数 {len(final_df)}。")
 
     else:
         st.info("暂无数据，请点击上方按钮开始提取，或确保目录下存在 data_log.csv")
