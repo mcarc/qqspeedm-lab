@@ -251,8 +251,6 @@ class KinematicAnalyzer:
         line_x = np.array([[x_min], [x_max]])
         line_y = self.model.predict(line_x).flatten() # 展平以匹配 Plotly 要求
         
-        print(f"{line_x.flatten()}, {line_y}")
-
         fig.add_trace(go.Scatter(
             x=line_x.flatten().tolist(), 
             y=line_y.tolist(),

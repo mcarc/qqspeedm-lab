@@ -4,12 +4,12 @@ import numpy as np
 from cnocr import CnOcr
 
 class OcrProcessor:
-    def __init__(self):
+    def __init__(self, config):
         # 初始化模型
         self.ocr = CnOcr(
-            rec_model_name='densenet_lite_136-gru', 
-            det_model_name='naive_det', 
-            cand_alphabet='0123456789.'
+            rec_model_name=config['ocr_engine']['rec_model_name'], 
+            det_model_name=config['ocr_engine']['det_model_name'], 
+            cand_alphabet=config['ocr_engine']['cand_alphabet']
         )
 
     def _format_timestamp(self, milliseconds):

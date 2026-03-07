@@ -78,6 +78,9 @@ class VideoProcessor:
         纯后端逻辑：提取并处理视频帧。
         使用 yield 实时回传进度和结果，实现与 UI 的完全解耦。
         """
+
+        os.makedirs(output_dir, exist_ok=True)
+
         cap = cv2.VideoCapture(str(self.file_path))
         if not cap.isOpened():
             raise ValueError(f"无法打开视频源: {self.file_path}")

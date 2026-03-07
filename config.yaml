@@ -1,0 +1,18 @@
+# 路径配置
+paths:
+  output_tmp_dir: "tmp/ocr_results"
+  # video_base_dir: "D:\\Videos"
+  video_base_dir: "D:\\Downloads\\scrcpy-win64-v2.3.1\\scrcpy-win64-v2.3.1"
+
+
+# ROI (感兴趣区域) 预设配置
+roi_presets:
+    "预设 1: 底部数值区": "X=820, Y=900, W=97, H=46"
+    "预设 2: 左上角状态": "X=50, Y=50, W=150, H=150"
+    "预设 3: 仪表盘区域": "X=1600, Y=900, W=200, H=100"
+    "自定义手动输入": "X=, Y=, W=, H="
+
+ocr_engine:
+    rec_model_name: 'densenet_lite_136-gru'
+    det_model_name: 'naive_det'
+    cand_alphabet: '0123456789.'

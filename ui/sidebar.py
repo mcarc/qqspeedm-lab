@@ -3,16 +3,15 @@ from pathlib import Path
 from typing import Optional
 from ui.utils import init_app_state
 
-DEFAULT_BASE_DIR = "D:\\Videos"
 VIDEO_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv', '.flv'}
 
-def render_sidebar() -> Optional[Path]:
+def render_sidebar(config) -> Optional[Path]:
     """渲染侧边栏文件选择器"""
     st.sidebar.header("📁 文件浏览")
     
     # 状态初始化
     if "base_dir" not in st.session_state:
-        st.session_state.base_dir = DEFAULT_BASE_DIR
+        st.session_state.base_dir = config['paths'].get('video_base_dir')
 
     base_dir_input = st.sidebar.text_input("视频文件夹路径:", value=st.session_state.base_dir)
     base_path = Path(base_dir_input)

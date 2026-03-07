@@ -54,14 +54,14 @@ class DataService:
         return filtered_df, display_df
 
     @staticmethod
-    def save_new_data(new_data: list, csv_path: str):
-        """将新提取的数据保存到 CSV 文件"""
+    def save_new_data(new_data: list, output_dir: str):
+        """将新提取的数据保存到 data_log.csv 中，返回保存后的 DataFrame"""
         df = pd.DataFrame(new_data)
-        df.to_csv(csv_path, index=False)
+        df.to_csv(os.path.join(output_dir, "data_log.csv"), index=False)
         return df
 
     @staticmethod
-    def merge_and_save_edits(original_df: pd.DataFrame, edited_df: pd.DataFrame, start_f: int, end_f: int, csv_path: str):
+    def merge_and_save_edits(original_df: pd.DataFrame, edited_df: pd.DataFrame, start_f: int, end_f: int, output_dir: str):
         """
         将编辑后的切片数据与原数据合并，重新排序并落盘保存
         :return: (合并后的完整 df, 本次保存的局部 df)
@@ -83,7 +83,7 @@ class DataService:
         final_df = final_df.sort_values(by="frame_idx")
 
         # 5. 落盘保存
-        final_df.to_csv(csv_path, index=False)
+        final_df.to_csv(os.path.join(output_dir, "data_log.csv"), index=False)
 
         return final_df, save_part_df
 

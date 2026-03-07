@@ -5,16 +5,9 @@ from core.ocr import OcrProcessor
 from core.video import VideoProcessor
 from core.data_service import DataService
 
-# 配置项
-OUTPUT_DIR = "tmp/ocr_results"
-CSV_PATH = os.path.join(OUTPUT_DIR, "data_log.csv")
-# VIDEO_SOURCE = 'temp_clipped.mp4'  # 将视频路径提取为常量，方便多处调用
-
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
 @st.cache_resource
-def get_frame_processor():
-    return OcrProcessor()
+def get_frame_processor(config):
+    return OcrProcessor(config)
 
 def render_video_processor(video_processor: VideoProcessor, frame_processor: OcrProcessor, roi, status_container, output_dir):
     """
@@ -46,7 +39,7 @@ def render_video_processor(video_processor: VideoProcessor, frame_processor: Ocr
         st.error(f"视频处理异常: {e}")
         return None
 
-def render_ocr(video_path, roi):
+def render_ocr(video_path, roi, config):
 
     status_container = st.container()
 
@@ -68,14 +61,14 @@ def render_ocr(video_path, roi):
     if should_run:
         # 使用 spinner 做一个极简的加载提示，不占用进度条位置
         with st.spinner("正在后台提取数值..."):
-            frame_processor = get_frame_processor()
+            frame_processor = get_frame_processor(config)
             
             # new_data = process_video(processor, video_path, roi, status_container)
             video_processor = VideoProcessor(Path(video_path))
-            new_data = render_video_processor(video_processor, frame_processor, roi, status_container, OUTPUT_DIR)
+            new_data = render_video_processor(video_processor, frame_processor, roi, status_container, config['paths']['output_tmp_dir'])
 
             if new_data:
-                df = DataService.save_new_data(new_data, CSV_PATH)
+                df = DataService.save_new_data(new_data, config['paths']['output_tmp_dir'])
                 st.session_state.data_df = df
                 st.rerun() # 跑完直接刷新，进入结果展示阶段
             else:
@@ -147,7 +140,7 @@ def render_ocr(video_path, roi):
                 edited_df=edited_filtered_df,
                 start_f=sel_start,
                 end_f=sel_end,
-                csv_path=CSV_PATH
+                output_dir=config['paths']['output_tmp_dir']
             )
             
             # 更新 Session State (状态管理仍然留在前端)

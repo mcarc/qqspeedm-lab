@@ -7,7 +7,7 @@ from ui.ocr import render_ocr
 from ui.kinematics import render_kinematic_analysis
 
 # ================= 主函数 =================
-def execute_video_pipeline():
+def execute_video_pipeline(config):
     st.set_page_config(page_title="Lab", layout="wide")
     st.title("🎬 实验室")
     
@@ -15,7 +15,7 @@ def execute_video_pipeline():
     init_app_state()
 
     # 2. 侧边栏渲染
-    selected_path = render_sidebar()
+    selected_path = render_sidebar(config)
 
     # 3. 主页面路由
     if not selected_path:
@@ -30,12 +30,12 @@ def execute_video_pipeline():
             render_slicer(selected_path)
         else:
             # 步骤 2: ROI 选择
-            render_roi_selector(st.session_state['clipped_video_path'])
+            render_roi_selector(st.session_state['clipped_video_path'], config)
 
     # 步骤 3: 统一执行 OCR 渲染
     if st.session_state.get('show_ocr_module') and st.session_state.get('current_ocr_coords'):
         st.divider()
-        render_ocr(st.session_state['clipped_video_path'], st.session_state['current_ocr_coords'])
+        render_ocr(st.session_state['clipped_video_path'], st.session_state['current_ocr_coords'], config)
 
         # 步骤 4: 动力分析
         if st.session_state.get('show_kinematic_module'):

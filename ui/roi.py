@@ -6,15 +6,6 @@ from ui.utils import reset_canvas
 from core.utils import parse_roi_string
 from core.video import VideoProcessor
 
-# 1. 提取常量：避免每次函数调用时重复创建
-ROI_PRESETS = {
-    "预设 1: 底部数值区": "X=820, Y=900, W=97, H=46",
-    "预设 2: 左上角状态": "X=50, Y=50, W=150, H=150",
-    "预设 3: 仪表盘区域": "X=1600, Y=900, W=200, H=100",
-    "自定义手动输入": ""
-}
-
-# 2. 抽离视频读取逻辑并使用缓存：极大提升 UI 流畅度
 
 @st.cache_data(show_spinner=False)
 def get_video_frame_count(video_path: str) -> int:
@@ -28,7 +19,7 @@ def get_video_frame(video_path: str, frame_no: int):
     processor = VideoProcessor(Path(video_path))
     return processor.get_video_frame(frame_no)
 
-def render_preset_selector(clipped_video_path: str):
+def render_preset_selector(clipped_video_path: str, config):
     """
     渲染预设坐标输入界面。
     用户可以选择预设坐标或手动输入坐标，解析后显示 ROI 预览。
@@ -37,9 +28,9 @@ def render_preset_selector(clipped_video_path: str):
     
     p_col1, p_col2 = st.columns(2)
     with p_col1:
-        preset_choice = st.selectbox("快捷选项", list(ROI_PRESETS.keys()))
+        preset_choice = st.selectbox("快捷选项", list(config['roi_presets'].keys()))
     with p_col2:
-        default_val = ROI_PRESETS.get(preset_choice, "")
+        default_val = config['roi_presets'].get(preset_choice, "")
         roi_input = st.text_input("坐标参数", value=default_val, placeholder="例如: X=820, Y=900, W=97, H=46")
 
     # 底部通用按钮 (抽离到外层，无论上方逻辑如何都应显示)
@@ -47,13 +38,13 @@ def render_preset_selector(clipped_video_path: str):
         st.session_state['clipped_video_path'] = None
         st.rerun()
 
-    # 3. 卫语句：处理空输入情况，提前结束逻辑
+    # 卫语句：处理空输入情况，提前结束逻辑
     if not roi_input.strip():
         return
 
     coords = parse_roi_string(roi_input)
     
-    # 4. 卫语句：处理解析失败情况
+    # 卫语句：处理解析失败情况
     if not coords:
         st.error("格式解析失败！请确保格式为: X=数字, Y=数字, W=数字, H=数字")
         return
@@ -67,7 +58,7 @@ def render_preset_selector(clipped_video_path: str):
         st.error("无法读取视频画面，请检查视频文件是否有效。")
         return
 
-    # 5. 显式边界验证：代替原本的 try-except 和 size > 0 检查
+    # 显式边界验证：代替原本的 try-except 和 size > 0 检查
     img_h, img_w = frame_rgb.shape[:2]
     if x < 0 or y < 0 or x + w > img_w or y + h > img_h or w <= 0 or h <= 0:
         st.error(f"裁剪区域超出视频画面范围或无效！(当前画面尺寸: {img_w}x{img_h})")
@@ -205,7 +196,7 @@ def render_manual_selector(clipped_video_path: str):
                 else:
                     st.warning("框选区域无效，请重新画框。")
 
-def render_roi_selector(clipped_video_path: str):
+def render_roi_selector(clipped_video_path: str, config):
     """
     渲染 ROI 选择器（预设坐标 或 手动框选）。
     此函数负责更新 session_state 中的坐标和标志位。
@@ -222,7 +213,7 @@ def render_roi_selector(clipped_video_path: str):
 
     # ---------------- 分支 A: 使用预设坐标 ----------------
     if roi_mode == "使用预设坐标":
-        render_preset_selector(clipped_video_path)
+        render_preset_selector(clipped_video_path, config)
     # ---------------- 分支 B: 手动在画面中框选 ----------------
     else:
         render_manual_selector(clipped_video_path)
