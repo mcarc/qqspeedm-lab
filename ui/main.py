@@ -30,7 +30,7 @@ def execute_video_pipeline(config):
             render_slicer(selected_path)
         else:
             # 步骤 2: ROI 选择
-            render_roi_selector(st.session_state['clipped_video_path'], config)
+            render_roi_selector(st.session_state['clipped_video_path'], st.session_state['current_source_filename'],config)
 
     # 步骤 3: 统一执行 OCR 渲染
     if st.session_state.get('show_ocr_module') and st.session_state.get('current_ocr_coords'):

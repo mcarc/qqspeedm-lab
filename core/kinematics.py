@@ -117,7 +117,7 @@ class KinematicAnalyzer:
         
         return is_success, clean_df, metrics
 
-    def plot_static(self, clean_df, metrics, title=None):
+    def plot_vt_static(self, clean_df, metrics, title=None):
         if self.model is None:
             raise NotInitializedError("没有可用的模型进行绘制。")
 
@@ -200,7 +200,7 @@ class KinematicAnalyzer:
         plt.tight_layout()
         return fig
 
-    def plot_interactive(self, clean_df, metrics, title=None):
+    def plot_vt_interactive(self, clean_df, metrics, title=None):
         if self.model is None:
             raise NotInitializedError("没有可用的模型进行绘制。")
 
@@ -332,3 +332,137 @@ class KinematicAnalyzer:
     def _fallback_analysis(self, clean_df):
         """如果拟合失败（比如 R² 太低）的后备方案"""
         raise NotImplementedError("拟合失败的后备分析方案尚未实现。")
+
+    def analyze_acceleration_trend(self, clean_df, window_size=5):
+        """
+        计算并平滑加速度 (微分与平滑)，用于检测斜率是否在增加 (Jerk > 0)
+        
+        :param clean_df: 必须是 process_and_fit 处理后的 DataFrame (包含 is_inlier 列)
+        :param window_size: 滑动窗口大小，用于平滑处理
+        :return: 包含加速度数据的 DataFrame, 趋势指标字典
+        """
+        if 'is_inlier' not in clean_df.columns:
+            raise NotInitializedError("请先运行 process_and_fit 方法以排除离群点。")
+            
+        # 严格限制：只对“内点”进行微分，否则离群点会导致导数爆炸
+        inliers = clean_df[clean_df['is_inlier']].copy()
+        inliers = inliers.sort_values('video_timestamp').reset_index(drop=True)
+        
+        if len(inliers) < 3:
+            raise ValueError("有效的内点数量过少，无法进行微分计算。")
+
+        # 1. 离散微分 (使用 np.gradient 处理可能不均匀的时间间隔)
+        t_ms = inliers['video_timestamp'].values
+        v_kmh = inliers['clean_value'].values
+        
+        # dv/dt 的单位转换: v 是 km/h, t 是 ms。 
+        # 我们希望 a 的单位是 (km/h)/s，所以 t 需要除以 1000 转换为秒
+        t_sec = t_ms / 1000.0
+        
+        # 计算加速度 a = dv/dt
+        # np.gradient(y, x) 自动处理边缘点和非均匀间距
+        raw_acceleration = np.gradient(v_kmh, t_sec) 
+        inliers['raw_acceleration'] = raw_acceleration
+
+        # 去除 inliers 第一行
+        t_sec = t_sec[1:]
+        inliers = inliers.iloc[1:]
+        
+        # 2. 平滑处理 (移动平均)
+        # min_periods=1 保证两端的点也能计算出平滑值
+        inliers['smooth_acceleration'] = inliers['raw_acceleration'].rolling(
+            window=window_size, center=True, min_periods=1).mean()
+
+        # 3. 计算加加速度 (Jerk) 趋势
+        # 对平滑后的加速度再做一次简单的线性回归，看斜率(Jerk)是否显著大于0
+        X_acc = t_sec.reshape(-1, 1)
+        y_acc = inliers['smooth_acceleration'].values
+        
+        jerk_model = LinearRegression()
+        jerk_model.fit(X_acc, y_acc)
+        jerk = jerk_model.coef_[0] # 加速度的变化率 (km/h)/s^2
+        
+        trend_metrics = {
+            'mean_acceleration': np.mean(y_acc),
+            'jerk': jerk,
+            'is_accelerating_faster': jerk > 0  # 如果为 True，说明 v-t 斜率确实在增加
+        }
+        
+        self.jerk_model = jerk_model # 保存模型供画图使用
+        
+        return inliers, trend_metrics
+
+    def plot_acceleration_interactive(self, acc_df, trend_metrics, title=None):
+        """绘制加速度的交互式图表，直观查看斜率变化趋势"""
+        if 'smooth_acceleration' not in acc_df.columns:
+            raise ValueError("缺少加速度数据，请先运行 analyze_acceleration_trend。")
+            
+        fig = go.Figure()
+
+        # 1. 绘制原始离散加速度 (散点，淡化)
+        fig.add_trace(go.Scatter(
+            x=acc_df['video_timestamp'].tolist(), 
+            y=acc_df['raw_acceleration'].tolist(),
+            mode='markers+lines',
+            name='Raw Accel (diferential)',
+            line=dict(color='rgba(150, 150, 150, 0.3)', width=1),
+            marker=dict(color='rgba(150, 150, 150, 0.5)', size=4),
+            hovertemplate="Time: %{x:.1f} ms<br>Raw a: %{y:.2f} (km/h)/s<extra></extra>"
+        ))
+
+        # 2. 绘制平滑后的加速度 (粗实线)
+        color_smooth = '#8E44AD' # 紫色代表平滑加速度
+        fig.add_trace(go.Scatter(
+            x=acc_df['video_timestamp'].tolist(), 
+            y=acc_df['smooth_acceleration'].tolist(),
+            mode='lines',
+            name='Smoothed Accel',
+            line=dict(color=color_smooth, width=3, shape='spline'),
+            hovertemplate="Time: %{x:.1f} ms<br>Smooth a: %{y:.2f} (km/h)/s<extra></extra>"
+        ))
+        
+        # 3. 绘制加速度趋势线 (Jerk 拟合线)
+        t_sec = acc_df['video_timestamp'].values / 1000.0
+        x_min, x_max = acc_df['video_timestamp'].min(), acc_df['video_timestamp'].max()
+        trend_line_y = self.jerk_model.predict(np.array([[t_sec.min()], [t_sec.max()]]))
+        
+        fig.add_trace(go.Scatter(
+            x=[x_min, x_max], 
+            y=trend_line_y.tolist(),
+            mode='lines',
+            name='Jerk Trend',
+            line=dict(color='#E67E22', width=2, dash='dash')
+        ))
+
+        # 4. 指标文本框
+        trend_status = "↗ 斜率增加" if trend_metrics['is_accelerating_faster'] else "↘ 斜率减小(或恒定)"
+        color_trend = "green" if trend_metrics['is_accelerating_faster'] else "red"
+        
+        stats_text = (
+            f"<b>Acceleration Stats:</b><br>"
+            f"Mean a: {trend_metrics['mean_acceleration']:.2f} (km/h)/s<br>"
+            f"Jerk (da/dt): {trend_metrics['jerk']:.3f} (km/h)/s²<br>"
+            f"Trend: <span style='color:{color_trend}'>{trend_status}</span>"
+        )
+
+        fig.add_annotation(
+            xref="paper", yref="paper", x=0.02, y=0.98,
+            text=stats_text, showarrow=False,
+            font=dict(family="monospace", size=12, color="#333333"),
+            align="left", bgcolor="rgba(255, 255, 255, 0.9)",
+            bordercolor="#CCCCCC", borderwidth=1, borderpad=6
+        )
+
+        final_title = title if title else f"A-T Analysis (Derivative & Smooth)"
+        fig.update_layout(
+            title=dict(text=final_title, font=dict(size=18), x=0.02),
+            xaxis_title="Time (ms)",
+            yaxis_title="Acceleration ((km/h)/s)",
+            plot_bgcolor='white',
+            xaxis=dict(showgrid=True, gridcolor='rgba(0,0,0,0.1)', zeroline=False),
+            yaxis=dict(showgrid=True, gridcolor='rgba(0,0,0,0.1)', zeroline=True, zerolinecolor='rgba(0,0,0,0.2)'),
+            legend=dict(x=0.98, y=0.02, xanchor='right', yanchor='bottom', bgcolor='rgba(255,255,255,0.9)'),
+            margin=dict(l=60, r=40, t=60, b=50)
+        )
+
+        return fig

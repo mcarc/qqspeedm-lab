@@ -1,6 +1,31 @@
 import streamlit as st
+import uuid
 from core.kinematics import KinematicAnalyzer
 from core.data_service import ExperimentDataManager
+
+# 1. 缓存计算函数，并额外返回一个唯一指纹 (run_id)
+@st.cache_data(show_spinner=False)
+def run_analysis_and_plot(df, video_meta_dict, exp_params):
+    analyzer = KinematicAnalyzer(
+        video_meta=video_meta_dict,
+        **exp_params
+    )
+    
+    is_success, clean_df, metrics = analyzer.process_and_fit(df)
+    
+    if "error" in metrics:
+         return is_success, clean_df, metrics, None, None, None, None
+
+    # 提前生成图表
+    fig_vt = analyzer.plot_vt_interactive(clean_df, metrics)
+    acc_df, trend_metrics = analyzer.analyze_acceleration_trend(clean_df)
+    fig_acc = analyzer.plot_acceleration_interactive(acc_df, trend_metrics)
+    static_fig = analyzer.plot_vt_static(clean_df, metrics)
+
+    # 只有在缓存未命中（即 df 或参数发生变化，导致重新执行此函数）时，才会生成一个新的 UUID。如果缓存命中，它会直接返回上一次缓存的旧 UUID。
+    run_id = str(uuid.uuid4())
+
+    return is_success, clean_df, metrics, fig_vt, fig_acc, static_fig, run_id
 
 def render_kinematic_analysis(df):
     """
@@ -60,14 +85,14 @@ def render_kinematic_analysis(df):
     # 1. 实例化分析器
     analyzer = KinematicAnalyzer(
         video_meta=video_meta,
-        conf_threshold=conf_threshold,
-        r2_min=r2_min,
-        residual_threshold=residual_threshold
+        **exp_params
     )
     
-    # 2. 核心处理 (使用 spinner 提供更好的 UX)
+    # 执行核心逻辑（解构出 run_id）
     with st.spinner("正在进行数据清洗与 RANSAC 拟合..."):
-        is_success, clean_df, metrics = analyzer.process_and_fit(df)
+        is_success, clean_df, metrics, fig_vt, fig_acc, static_fig, run_id = run_analysis_and_plot(
+            df, video_meta, exp_params
+        )
         
     # 3. 错误处理与中断
     if "error" in metrics:
@@ -95,28 +120,35 @@ def render_kinematic_analysis(df):
     with col5:
         st.metric(label="有效内点 / 离群点", value=f"{metrics['inliers_count']} / {metrics['outliers_count']}")
 
-    # 6. 可视化图表渲染
+    # 直接渲染缓存好的图表
     st.markdown("### 速度-时间 (V-T) 拟合图")
-    # 因为您的 plot_vt_graph 已经修改为返回 fig，直接接收并用 st.pyplot 渲染
-    # fig = analyzer.plot_static(clean_df, metrics)
-    fig = analyzer.plot_interactive(clean_df, metrics)
-    
-    if fig is not None:
-        st.plotly_chart(fig, use_container_width=True, theme=None)
-    else:
-        st.error("未能生成可视化图表。")
+    if fig_vt is not None:
+        st.plotly_chart(fig_vt, use_container_width=True, theme=None)
 
-    # 7. 实验数据管理
-    static_fig = analyzer.plot_static(clean_df, metrics)
+    st.markdown("### 速度差分-时间 (A-T) 拟合图")
+    if fig_acc is not None:
+        st.plotly_chart(fig_acc, use_container_width=True, theme=None)
 
-    records_to_save = {
-        "video_meta": video_meta, # convert tuple to list
-        "exp_params": exp_params,
-        "metrics": metrics,
-    }
+    # ---------------------------------------------------------
+    # 静默自动保存逻辑
+    # ---------------------------------------------------------
+    # 确保拟合成功，且获取到了有效的 run_id
+    if is_success and run_id is not None:
+        # 检查这个版本的分析结果是否已经保存过
+        if st.session_state.get('last_saved_run_id') != run_id:
+            # 如果没保存过（说明是新产生的数据，或者参数被修改了），执行真正的写入动作
+            records_to_save = {
+                "video_meta": video_meta,
+                "exp_params": exp_params,
+                "metrics": metrics,
+            }
+            exp_manager = ExperimentDataManager()
+            exp_manager.save_all_results(clean_df, records_to_save, static_fig)
+            
+            # 将当前 run_id 写入 session_state，标记为“已落盘”
+            st.session_state['last_saved_run_id'] = run_id
+            
+            # (可选) 可以在这里闪现一个短暂的成功提示，让用户知道后台保存了
+            st.toast("💾 数据已自动保存")
 
-    exp_manager = ExperimentDataManager()
-    exp_manager.save_all_results(clean_df, records_to_save, static_fig)
-
-    # 将结果返回给上层，方便进行数据保存或跨组件联动
     return is_success, clean_df, metrics

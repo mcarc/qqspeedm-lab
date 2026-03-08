@@ -8,18 +8,18 @@ from core.video import VideoProcessor
 
 
 @st.cache_data(show_spinner=False)
-def get_video_frame_count(video_path: str) -> int:
+def get_video_frame_count(video_path: str, name: str) -> int:
     """获取视频总帧数并缓存"""
     processor = VideoProcessor(Path(video_path))
     return processor.get_video_frame_count()
 
 @st.cache_data(show_spinner=False, max_entries=20)
-def get_video_frame(video_path: str, frame_no: int):
+def get_video_frame(video_path: str, name: str, frame_no: int):
     """读取指定帧并缓存，避免拖动 slider 和画框时重复读取硬盘"""
     processor = VideoProcessor(Path(video_path))
     return processor.get_video_frame(frame_no)
 
-def render_preset_selector(clipped_video_path: str, config):
+def render_preset_selector(clipped_video_path: str, video_name: str, config):
     """
     渲染预设坐标输入界面。
     用户可以选择预设坐标或手动输入坐标，解析后显示 ROI 预览。
@@ -53,7 +53,7 @@ def render_preset_selector(clipped_video_path: str, config):
     st.success(f"坐标解析成功: X={x}, Y={y}, W={w}, H={h}")
     
     # 获取视频帧
-    frame_rgb = get_video_frame(clipped_video_path, 0)
+    frame_rgb = get_video_frame(clipped_video_path, video_name, 0)
     if frame_rgb is None:
         st.error("无法读取视频画面，请检查视频文件是否有效。")
         return
@@ -74,7 +74,7 @@ def render_preset_selector(clipped_video_path: str, config):
         st.session_state['current_ocr_coords'] = (x, y, w, h)
         st.rerun()
 
-def render_manual_selector(clipped_video_path: str):
+def render_manual_selector(clipped_video_path: str, video_name: str):
     """
     渲染手动框选界面。
     用户可以在视频帧上直接框选 ROI 区域，实时预览并确认。
@@ -90,7 +90,7 @@ def render_manual_selector(clipped_video_path: str):
             
     # --- 右侧列：核心画框逻辑 ---
     with col2:
-        total_frames = get_video_frame_count(clipped_video_path)
+        total_frames = get_video_frame_count(clipped_video_path, video_name)
         if total_frames <= 0:
             st.error("无法获取视频长度，请检查视频文件。")
             return
@@ -103,7 +103,7 @@ def render_manual_selector(clipped_video_path: str):
         )
 
         # 读取帧数据 (利用缓存)
-        frame_rgb = get_video_frame(clipped_video_path, frame_no)
+        frame_rgb = get_video_frame(clipped_video_path, video_name, frame_no)
         
         # 卫语句：如果帧读取失败，直接中断后续逻辑
         if frame_rgb is None:
@@ -196,7 +196,7 @@ def render_manual_selector(clipped_video_path: str):
                 else:
                     st.warning("框选区域无效，请重新画框。")
 
-def render_roi_selector(clipped_video_path: str, config):
+def render_roi_selector(clipped_video_path: str, video_name: str, config):
     """
     渲染 ROI 选择器（预设坐标 或 手动框选）。
     此函数负责更新 session_state 中的坐标和标志位。
@@ -213,7 +213,7 @@ def render_roi_selector(clipped_video_path: str, config):
 
     # ---------------- 分支 A: 使用预设坐标 ----------------
     if roi_mode == "使用预设坐标":
-        render_preset_selector(clipped_video_path, config)
+        render_preset_selector(clipped_video_path, video_name, config)
     # ---------------- 分支 B: 手动在画面中框选 ----------------
     else:
-        render_manual_selector(clipped_video_path)
+        render_manual_selector(clipped_video_path, video_name)
