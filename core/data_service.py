@@ -117,12 +117,16 @@ class ExperimentDataManager:
             return {k: ExperimentDataManager._sanitize_data(v) for k, v in data.items()}
         elif isinstance(data, (list, tuple, set)):
             return [ExperimentDataManager._sanitize_data(v) for v in data]
-        elif isinstance(data, (np.float32, np.float64)):
-            return float(data)
-        elif isinstance(data, (np.int32, np.int64)):
-            return int(data)
+        # elif isinstance(data, (np.float32, np.float64)):
+        #     return float(data)
+        # elif isinstance(data, (np.int32, np.int64)):
+        #     return int(data)
         elif isinstance(data, np.ndarray):
             return ExperimentDataManager._sanitize_data(data.tolist())
+        elif isinstance(data, np.generic):
+            # 这里的 np.generic 会捕获所有 numpy 标量 (包括 _core.multiarray.scalar)
+            # .item() 是 NumPy 的内置方法，能安全地将其转换为原生的 int, float, bool 等
+            return data.item()
         else:
             return data
 
@@ -165,13 +169,14 @@ class ExperimentDataManager:
         fig.savefig(filepath, format='pdf', bbox_inches='tight', dpi=300)
         return filepath
 
-    def save_all_results(self, df: pd.DataFrame, records: dict, fig: plt.Figure) -> dict:
+    def save_all_results(self, df: pd.DataFrame, records: dict, vt_fig: plt.Figure, acc_fig: plt.Figure) -> dict:
         """
         一键保存所有实验数据，返回保存的文件路径字典。
         """
         saved_paths = {
             "data_path": self.save_dataframe(df),
             "records_path": self.save_records(records),
-            "plot_path": self.save_figure(fig)
+            "plot_vt_path": self.save_figure(vt_fig, filename="vt_plot.pdf"),
+            "plot_acc_path": self.save_figure(acc_fig, filename="acc_plot.pdf")
         }
         return saved_paths

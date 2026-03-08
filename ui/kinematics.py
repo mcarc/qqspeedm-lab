@@ -20,12 +20,13 @@ def run_analysis_and_plot(df, video_meta_dict, exp_params):
     fig_vt = analyzer.plot_vt_interactive(clean_df, metrics)
     acc_df, trend_metrics = analyzer.analyze_acceleration_trend(clean_df)
     fig_acc = analyzer.plot_acceleration_interactive(acc_df, trend_metrics)
-    static_fig = analyzer.plot_vt_static(clean_df, metrics)
+    static_fig_vt = analyzer.plot_vt_static(clean_df, metrics)
+    static_fig_acc = analyzer.plot_acceleration_static(acc_df, trend_metrics)
 
     # 只有在缓存未命中（即 df 或参数发生变化，导致重新执行此函数）时，才会生成一个新的 UUID。如果缓存命中，它会直接返回上一次缓存的旧 UUID。
     run_id = str(uuid.uuid4())
 
-    return is_success, clean_df, metrics, fig_vt, fig_acc, static_fig, run_id
+    return is_success, clean_df, metrics, trend_metrics, fig_vt, fig_acc, static_fig_vt, static_fig_acc, run_id
 
 def render_kinematic_analysis(df):
     """
@@ -90,7 +91,7 @@ def render_kinematic_analysis(df):
     
     # 执行核心逻辑（解构出 run_id）
     with st.spinner("正在进行数据清洗与 RANSAC 拟合..."):
-        is_success, clean_df, metrics, fig_vt, fig_acc, static_fig, run_id = run_analysis_and_plot(
+        is_success, clean_df, metrics, trend_metrics, fig_vt, fig_acc, static_fig_vt, static_fig_acc, run_id = run_analysis_and_plot(
             df, video_meta, exp_params
         )
         
@@ -141,9 +142,10 @@ def render_kinematic_analysis(df):
                 "video_meta": video_meta,
                 "exp_params": exp_params,
                 "metrics": metrics,
+                "trend_metrics": trend_metrics,
             }
             exp_manager = ExperimentDataManager()
-            exp_manager.save_all_results(clean_df, records_to_save, static_fig)
+            exp_manager.save_all_results(clean_df, records_to_save, static_fig_vt, static_fig_acc)
             
             # 将当前 run_id 写入 session_state，标记为“已落盘”
             st.session_state['last_saved_run_id'] = run_id

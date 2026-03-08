@@ -461,8 +461,84 @@ class KinematicAnalyzer:
             plot_bgcolor='white',
             xaxis=dict(showgrid=True, gridcolor='rgba(0,0,0,0.1)', zeroline=False),
             yaxis=dict(showgrid=True, gridcolor='rgba(0,0,0,0.1)', zeroline=True, zerolinecolor='rgba(0,0,0,0.2)'),
-            legend=dict(x=0.98, y=0.02, xanchor='right', yanchor='bottom', bgcolor='rgba(255,255,255,0.9)'),
+            legend=dict(x=0.98, y=0.02, font=dict(color='#333333'), xanchor='right', yanchor='bottom', bgcolor='rgba(255,255,255,0.9)'),
             margin=dict(l=60, r=40, t=60, b=50)
         )
 
+        return fig
+    
+    def plot_acceleration_static(self, acc_df, trend_metrics, title=None):
+        """绘制加速度的静态图表 (Matplotlib)，用于导出或静态展示"""
+        if 'smooth_acceleration' not in acc_df.columns:
+            raise ValueError("缺少加速度数据，请先运行 analyze_acceleration_trend。")
+        if not hasattr(self, 'jerk_model'):
+            raise NotInitializedError("缺少 Jerk 模型，无法绘制趋势线。")
+
+        # --- 1. 风格设置 ---
+        fig, ax = plt.subplots(figsize=(11/1.4, 7/1.4), dpi=100)
+
+        # 定义颜色：浅灰(原始离散点)，紫色(平滑线)，橙色(趋势线)
+        color_raw = '#BDC3C7'    
+        color_smooth = '#8E44AD' 
+        color_trend = '#E67E22'  
+
+        x_data = acc_df['video_timestamp']
+        
+        # --- 2. 绘制数据 ---
+        # 原始离散加速度：使用带标记的细实线，降低透明度避免喧宾夺主
+        ax.plot(x_data, acc_df['raw_acceleration'], 
+                marker='.', linestyle='-', color=color_raw, alpha=0.5, 
+                label='Raw Accel', zorder=1)
+
+        # 平滑后的加速度：使用较粗的实线，突出主视觉
+        ax.plot(x_data, acc_df['smooth_acceleration'], 
+                linestyle='-', color=color_smooth, linewidth=2.5, 
+                label='Smoothed Accel', zorder=2)
+
+        # --- 3. 绘制 Jerk 趋势线 ---
+        # 注意：模型训练时用的时间单位是秒，预测时也需要转换
+        t_sec = x_data.values / 1000.0
+        x_min, x_max = x_data.min(), x_data.max()
+        t_sec_min, t_sec_max = t_sec.min(), t_sec.max()
+        
+        # 获取两端点的预测值来画直线
+        trend_line_x = np.array([x_min, x_max])
+        trend_line_y = self.jerk_model.predict(np.array([[t_sec_min], [t_sec_max]]))
+        
+        ax.plot(trend_line_x, trend_line_y, 
+                linestyle='--', color=color_trend, linewidth=2, 
+                label='Jerk Trend', zorder=3)
+
+        # --- 4. 装饰与标注 ---
+        # 根据斜率状态决定文字描述
+        trend_status = "Increasing" if trend_metrics['is_accelerating_faster'] else "Decreasing/Flat"
+        
+        # 使用 Matplotlib 的 MathText 渲染 LaTeX 风格公式
+        stats_text = (
+            f"$\\mathbf{{Acc\\ Stats:}}$\n"
+            f"Mean $a$: {trend_metrics['mean_acceleration']:>7.2f} $(km/h)/s$\n"
+            f"Jerk: {trend_metrics['jerk']:>10.3f} $(km/h)/s^2$\n"
+            f"Trend: {trend_status:>11}"
+        )
+
+        # 左上角统计文本框，样式对齐 plot_vt_static
+        props = dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.9, edgecolor='#CCCCCC')
+        ax.text(0.03, 0.96, stats_text, transform=ax.transAxes, fontsize=10,
+                verticalalignment='top', family='monospace', bbox=props, zorder=4)
+
+        # 标题与标签
+        final_title = title if title else f"A-T Analysis: {self.video_meta.get('name', 'Unknown')}"
+        ax.set_title(final_title, fontsize=14, pad=15, fontweight='bold', loc='left')
+        ax.set_xlabel('Time (ms)', fontsize=11, labelpad=10)
+        ax.set_ylabel('Acceleration ((km/h)/s)', fontsize=11, labelpad=10)
+
+        # --- 5. 细节微调 ---
+        ax.legend(frameon=True, facecolor='white', loc='lower right', fontsize=10)
+        ax.grid(True, linestyle='--', alpha=0.5, zorder=0)
+
+        # 移除上方和右侧边框线
+        for spine in ['top', 'right']:
+            ax.spines[spine].set_visible(False)
+
+        plt.tight_layout()
         return fig
