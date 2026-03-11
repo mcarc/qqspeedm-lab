@@ -1,8 +1,9 @@
 # 路径配置
 paths:
   output_tmp_dir: "tmp/ocr_results"
-  # video_base_dir: "D:\\Videos"
-  video_base_dir: "D:\\Downloads\\scrcpy-win64-v2.3.1\\scrcpy-win64-v2.3.1"
+  video_base_dir: "D:\\Videos\\lab"
+  # video_base_dir: "D:\\Downloads\\scrcpy-win64-v2.3.1\\scrcpy-win64-v2.3.1"
+  scrcpy_exe_path: "D:\\Program Files\\scrcpy-win64-v3.3.4\\scrcpy.exe"
 
 
 # ROI (感兴趣区域) 预设配置
@@ -16,3 +17,9 @@ ocr_engine:
     rec_model_name: 'en_PP-OCRv4'
     cand_alphabet: '0123456789.'
     font_path: null
+
+scrcpy_settings:
+    bitrate: "16M"
+    max_size: "1440"
+    video_buffer: "200"
+    
